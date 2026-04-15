@@ -2,7 +2,7 @@ BATS_VERSION ?= v1.11.1
 BATS_DIR ?= .tools/bats-core
 BATS_BIN := $(BATS_DIR)/bin/bats
 
-.PHONY: bats-install test test-venv clean-bats
+.PHONY: bats-install test test-venv clean-bats clean
 
 bats-install:
 	@mkdir -p .tools
@@ -22,3 +22,6 @@ test-venv: bats-install
 
 clean-bats:
 	@rm -rf "$(BATS_DIR)"
+
+clean: clean-bats
+	@rm -rf .tools
