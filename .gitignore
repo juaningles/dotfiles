@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Local Python virtual environments
+.venv/
+
+# Local test/tooling dependencies
+.tools/

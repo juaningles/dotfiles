@@ -18,17 +18,15 @@ else
   fi
 fi
 
-# echo $($pcommand --version) found: $pcommand
-
-if ! "$pcommand" -c 'import pip' >/dev/null 2>&1
-then
-  echo pip not found. Please install pip
-  venv_fail || return 1 2>/dev/null || exit 1
-fi
-
 if ! "$pcommand" -c 'import venv' >/dev/null 2>&1
 then
   echo venv python package not found. Please install venv package
+  venv_fail || return 1 2>/dev/null || exit 1
+fi
+
+if ! command -v uv >/dev/null 2>&1
+then
+  echo uv not found. Please install uv and try again
   venv_fail || return 1 2>/dev/null || exit 1
 fi
 
@@ -42,7 +40,7 @@ fi
 if ! [ -d ".venv/$distname" ]
 then
   echo Creating Virtual Environment: ".venv/$distname"
-  $pcommand -m venv .venv/$distname
+  "$pcommand" -m venv .venv/$distname
   venv_install_reqs="yes"
 else
   unset venv_install_reqs
@@ -53,14 +51,14 @@ alias workdir="cd $(pwd)"
 
 if [ -n "$venv_install_reqs" ]
 then
-  pip install --upgrade pip
+  uv pip install --upgrade pip
   if [ -e "requirements.txt" ]
   then
     while IFS="" read -r p || [ -n "$p" ]
     do
       if ! python -c "import $p" >/dev/null 2>&1
       then
-        python -m pip install $p
+        uv pip install "$p"
       fi
     done < requirements.txt
   fi
