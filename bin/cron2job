@@ -1,0 +1,28 @@
+CRONJOB_NAME="$1"
+
+# Help function
+print_usage() {
+    cat << EOF
+Usage: $(basename $0) CRONJOB_NAME
+
+Run a Kubernetes cronjob manually.
+
+
+EOF
+}
+
+
+# Validate required arguments
+if [ -z "$CRONJOB_NAME" ]; then
+    echo "Error: No cronjob name provided."
+    print_usage
+    exit 1
+fi
+
+# Normalize cronjob name
+cronjob_name=$(echo $CRONJOB_NAME | awk -F'/' '{print $NF}')
+
+currdate=$(date +%s)
+kubectl create job --from=cronjob.batch/$cronjob_name now-$cronjob_name-${currdate}
+sleep 5
+kubectl logs job now-$cronjob_name-${currdate} --follow --all-containers

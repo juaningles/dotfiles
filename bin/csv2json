@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Check if at least one filename is provided
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <filename1> [<filename2> ...]"
+    exit 1
+fi
+
+# Iterate over each filename
+for file in "$@"; do
+    # Perform some action on each file (e.g., cast them out)
+    base_name=$(basename "$file" .csv)
+    #echo "Processing file: $file"
+    echo "$file > $base_name.json" 
+    mlr --csv --ojson cat  $file > $base_name.json
+    # Replace the following line with your actual command or logic
+    # externalprogram "$file" [other parameters]
+done
+

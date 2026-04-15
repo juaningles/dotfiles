@@ -1,0 +1,138 @@
+#!/bin/bash
+
+run_for_subs=$@
+
+# Initialize environment variable
+INSTALL_FLAG=""
+
+# Initialize an empty string to store other arguments
+OTHER_ARGS=""
+
+
+function print_usage() {
+  command_name=$(basename "$0")
+  echo -e "Usage:\n\t $command_name [options] [sub [sub ...]]"
+  echo -e "Options:"
+  echo -e "\t--install                install credentials"
+  echo -e "\t--query query_pattern    query for subscription naames that match query_pattern"
+}
+
+# Process command line arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --install)
+            # Set environment variable
+            INSTALL_FLAG="true"
+            shift
+            ;;
+        --help)
+            # Set environment variable
+            print_usage
+            exit
+            ;;
+        --query)
+            if [[ -z "$2" ]]; then
+              echo -e "ERROR: query parameter is required for --query"
+              print_usage
+              exit -2
+            fi
+            SEARCH_PATTERN=$2
+            OTHER_ARGS=$(az account list | jq -r --arg pattern "$SEARCH_PATTERN" '.[] | select(.name | test($pattern)) | .id')
+
+            shift
+            shift
+            ;;
+        -*)
+            # Set environment variable
+            echo "Unknown Option: $1"
+            print_usage
+            exit -1
+            ;;
+        *)
+            # Append other arguments to the OTHER_ARGS variable
+            OTHER_ARGS="$OTHER_ARGS $1"
+            shift
+            ;;
+    esac
+done
+
+run_for_subs=$OTHER_ARGS
+
+
+# Define color codes
+GREEN="\033[0;32m"
+RED="\033[0;31m"
+RESET="\033[0m"
+BLUE="\033[0;34m"
+
+# start test banner
+function start_test() {
+  echo -e "${BLUE}#========================================================================${RESET}"
+  echo -e "${BLUE}# $1${RESET}"
+  echo -e "${BLUE}#========================================================================${RESET}"
+}
+
+# delimit individual tests
+function end_test_item() {
+  echo -n
+}
+
+# end test banner
+function end_test() {
+  echo
+}
+
+
+function run_test() {
+  if [[ "$2" = "true" ]]; then
+    result=$($1 2>&1)
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}PASS${RESET}\t$1"
+    else
+        echo -e "${RED}FAIL${RESET}\t$1"
+    fi
+    if [ -z "$result" ]; then
+        echo -n
+    else
+        echo -e "$result"
+    fi
+    end_test_item
+  else
+    echo -e $1
+  fi
+}
+
+# load config data from az for listed subs
+configs=$(for x in $run_for_subs;
+            do
+              az aks list --subscription $x |
+              jq -c '.[] | .name as $n | .fqdn as $f | .resourceGroup as $r | .privateFqdn as $p | .id as $i | {name: $n, fqdn: $f, pfqdn: $p, sub: ( $i | match("[^/]*/[^/]*/([^/]*)/") | .captures[0].string ), rsrc: $r}';
+            done)
+
+for item in $configs;
+do
+  name=$(echo $item | jq -r '.name')
+  fqdn=$(echo $item | jq -r '.fqdn')
+  pfqdn=$(echo $item | jq -r '.pfqdn')
+  sub=$(echo $item | jq -r '.sub')
+  rsrc=$(echo $item | jq -r '.rsrc')
+
+  start_test "$name"
+
+  run_test "nslookup $fqdn" $INSTALL_FLAG
+
+  if [ -z "$pfqdn" ] || [ "$pfqdn" = "null" ]; then
+    if [[ -z "$INSTALL_FLAG-" ]]; then
+      echo -e "${BLUE}SKIPPED${RESET}\tprivate fqdn not set"
+      end_test_item
+    fi
+  else
+      run_test "nslookup $pfqdn" $INSTALL_FLAG
+  fi
+  run_test "az account set --subscription $sub" $INSTALL_FLAG
+  run_test "az aks get-credentials --resource-group $rsrc --name $name --overwrite-existing" $INSTALL_FLAG
+  run_test "kubelogin convert-kubeconfig -l azurecli" $INSTALL_FLAG
+  run_test "kubectl get nodes" $INSTALL_FLAG
+
+  end_test "$name"
+done

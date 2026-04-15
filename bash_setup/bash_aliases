@@ -1,0 +1,199 @@
+
+# set a fancy prompt (non-color, unless we know we "want" color)
+case "$TERM" in
+    xterm-color|*-256color) color_prompt=yes;;
+esac
+
+# uncomment for a colored prompt, if the terminal has the capability; turned
+# off by default to not distract the user: the focus in a terminal window
+# should be on the output of commands, not on the prompt
+force_color_prompt=yes
+
+if [ -n "$force_color_prompt" ]; then
+    if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
+        # We have color support; assume it's compliant with Ecma-48
+        # (ISO/IEC-6429). (Lack of such support is extremely rare, and such
+        # a case would tend to support setf rather than setaf.)
+        color_prompt=yes
+    else
+        color_prompt=
+    fi
+fi
+
+
+git_branch () { git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/'; }
+
+# see if we are running in a container
+pid=$(ps ax | grep "[r]edis-server \*:6379" | awk '{print $1}')
+pid_read=$(readlink "/proc/$pid/ns/pid")
+if [ "$pid_read" == "$(readlink /proc/1/ns/pid)" ]; then
+   # pid $pid is the same namespace as init system
+   unset IN_MATRIX
+else
+  # pid $pid is NOT the same namespace as init system
+  export IN_MATRIX=yes
+fi
+
+if [ "$color_prompt" = yes ]; then
+    if [ -z "$IN_MATRIX" ]; then
+      PS_HOST='\033[01;32m\]\h\033[01;32m\]'
+    else
+      PS_HOST='\033[01;32m\]devnode\033[01;32m\]'
+    fi
+    PS_TIME='\033[01;36m\]\t\033[01;32m\]'
+    PS_LOCATION=' \033[01;34m\]`pwd | sed "s#\(/[^/]\{1,\}/[^/]\{1,\}/[^/]\{1,\}/\).*\(/[^/]\{1,\}/[^/]\{1,\}\)/\{0,1\}#\1_\2#g"`'
+    PS_LOCATION='\[\033[01;34m\]\w\[\033[00m\]'
+
+    if [ -f "/etc/bash_completion.d/git-prompt" ]; then
+      source /etc/bash_completion.d/git-prompt
+      export GIT_PS1_SHOWDIRTYSTATE=1
+    #  export PS1='\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$(__git_ps1 "(%s)")\$ '
+      PS_BRANCH=' \033[00;33m\]$(git_branch)\[\033[00m\]\n\$ '
+      export GIT_PS1_SHOWUNTRACKEDFILES=yes
+      export GIT_PS1_SHOWCONFLICTSTATE=yes
+      export GIT_PS1_SHOWDIRTYSTATE=yes
+      export GIT_PS1_SHOWSTASHSTATE=yes
+      export GIT_PS1_SHOWUPSTREAM=yes
+      export GIT_PS1_SHOWCOLORHINTS=yes
+      PS_BRANCH=' \033[00;33m\]$(__git_ps1 "(%s)")\[\033[00m\]'
+    fi
+    PS_USER="\u"
+
+    PS1="$PS_TIME $PS_USER@$PS_HOST:$PS_LOCATION $PS_BRANCH\n \$ "
+    PS2='\[\033[01;36m\]>'
+
+    #last PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\n \$ '
+    #older PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$(__git_ps1)\n \$ '
+else
+    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+fi
+unset color_prompt force_color_prompt
+
+# If this is an xterm set the title to user@host:dir
+case "$TERM" in
+xterm*|rxvt*)
+    PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
+    ;;
+*)
+    ;;
+esac
+
+# enable color support of ls and also add handy aliases
+if [ -x /usr/bin/dircolors ]; then
+    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    #alias dir='dir --color=auto'
+    #alias vdir='vdir --color=auto'
+
+    alias grep='grep --color=auto'
+    alias fgrep='fgrep --color=auto'
+    alias egrep='egrep --color=auto'
+fi
+
+# colored GCC warnings and errors
+#export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+
+# some more ls aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+
+# Add an "alert" alias for long running commands.  Use like so:
+#   sleep 10; alert
+alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
+
+
+# enable programmable completion features (you don't need to enable
+# this, if it's already enabled in /etc/bash.bashrc and /etc/profile
+# sources /etc/bash.bashrc).
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+# source /etc/bash_completion
+
+alias kw='watch kubectl'
+alias kpw='fxk(){  kubectl get pod $@ --watch  ;  unset -f fxk; }; fxk'
+alias kssh='fxk(){  kubectl exec -it $@ -- /bin/bash;  unset -f fxk; }; fxk'
+alias ksh='fxk(){  kubectl exec -it $@ -- /bin/sh;  unset -f fxk; }; fxk'
+alias kbash='fxk(){  kubectl exec -it $@ -- /bin/bash;  unset -f fxk; }; fxk'
+alias kmux='fxk(){  kubectl exec -it $@ -- /usr/bin/tmux -u new-session -A -s $(whoami);  unset -f fxk; }; fxk'
+alias kmux2='fxk(){  kubectl exec -it $@ -- /usr/bin/tmux -u new-session -A -s $(whoami)2;  unset -f fxk; }; fxk'
+
+alias k=kubectl
+alias kd='kubectl describe $@'
+alias kg='kubectl get $@'
+
+alias k8l='kubectl config get-contexts'
+alias k8s='kubectl config use-context'
+alias k8n='kubectl config set-context --current --namespace'
+alias kc='kubectl config get-contexts -o name'
+alias kcfor='kubectl config get-contexts -o name | xargs -I{}'
+alias knodes='kubectl get nodes -o wide'
+alias kpods='kubectl get pods -o wide'
+alias klogs='kubectl logs --follow'
+alias kl='kubectl get pods,jobs,cronjobs -o wide'
+
+alias kadaar='kubectl exec -it $KA_ENV -- adaar -V'
+alias krunq='kubectl exec -it $KA_ENV -- runq -V'
+
+alias randkey='cat /dev/urandom | tr -dc _A-Z-a-z-0-9 | head -c${1:-64};echo;'
+alias sock='ssh socks -xfNT'
+
+alias dadaar='docker run  -v /mnt/c/code/perlibs:/usr/depot/perlibs -v /mnt/c/code/adaar-apps:/usr/depot/adaar-apps -v $(pwd):/usr/depot/local -it --rm adaar-debug:jessie adaar -V --chdir /usr/depot/local'
+alias dadaard='docker run  -v /mnt/c/code/perlibs:/usr/depot/perlibs -v /mnt/c/code/adaar-apps:/usr/depot/adaar-apps -v $(pwd):/usr/depot/local -it --rm adaar-debug:jessie adaard -V --chdir /usr/depot/local'
+alias adaar='docker run  -v /mnt/c/code/perlibs:/usr/depot/perlibs -v /mnt/c/code/adaar-apps:/usr/depot/adaar-apps -v $(pwd):/usr/depot/local -it --rm adaar:run adaar -V --chdir /usr/depot/local'
+alias adaarcli='docker run  -v /mnt/c/code/perlibs:/usr/depot/perlibs -v /mnt/c/code/adaar-apps:/usr/depot/adaar-apps -v $(pwd):/usr/depot/local -it --rm adaar:run bash'
+
+
+alias adaard='docker run  -v /mnt/c/code/perlibs:/usr/depot/perlibs -v /mnt/c/code/adaar-apps:/usr/depot/adaar-apps -v $(pwd):/usr/depot/local -it --rm adaar-debug:run adaard -V --chdir /usr/depot/local'
+alias ksqlproxy='echo Running as localhost:31433 ; kubectl port-forward service/mssql 31433:1433 --namespace=mssql'
+alias ksql='kubectl exec svc/mssql -it -n mssql -- /bin/bash -c "/opt/mssql-tools/bin/sqlcmd -U sa -P \$SA_PASSWORD"'
+alias squelch='grep -P "(^(\e\[[^\[]*)|^(\[))\[[PI].*"'
+alias pacr-login='fxk(){ ACR=$1 ; acrtoken=$(az acr login -n $ACR --expose-token --output tsv --query accessToken); podman login $ACR.azurecr.io -u "00000000-0000-0000-0000-000000000000" -p $acrtoken ;  unset -f fxk; }; fxk'
+
+alias keepalive='fxk(){ while touch ~/.bash_history ; do kubectl top $1 ; kubectl exec -it $1 -- touch /root/.bash_history; sleep 6 ; done ;  unset -f fxk; }; fxk'
+alias dacr-login='az acr login -n'
+alias activate="source venv.sh"
+alias asum="awk '{sum+=\$0} END{print sum}'"
+alias hilite='grep --color=always -e "^" -e'
+
+alias di='$DOCKER images --format "table {{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}"'
+alias dive="$DOCKER run -ti --rm  -v /var/run/docker.sock:/var/run/docker.sock docker.io/wagoodman/dive"
+# fix for docker connection issues in ubuntu jump servers
+alias drun='$DOCKER run -it --net=host'
+
+alias cdcode='cd ~/code'
+alias s1='sudo $(fc -ln -1)'
+alias cmm='ssh cmm -Xfnt tail -f /dev/null'
+alias cmmm='sudo mkdir -p /run/sshd ; sudo /usr/sbin/sshd ; ssh cmm -Xfnt tail -f /dev/null ;'
+alias nogitps1="export PS1='\[\e]0;\u@\h: \w\a\]\033[01;36m\]\t\033[01;32m\] \u@\033[01;32m\]\h\033[01;32m\]:\[\033[01;34m\]\w\[\033[00m\] \033[00;33m\]\[\033[00m\]\n$ '"
+
+export KA_ENVcli=svc/cli
+export KA_ENV='svc/cli'
+
+export PATH=~/code/bin:$PATH
+
+export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+
+source <(kubectl completion bash)
+complete -F __start_kubectl k
+
+export DOCKER=docker
+
+
+# Scan for and source completion files in ~/code/bin
+if [ -d ~/code/bin ]; then
+    for filename in $(find ~/code/bin -type f -name "*.completion")
+    do
+        source $filename
+    done
+fi
+
+alias noisy='PYTHONUNBUFFERED=1 LOG_LEVEL=DEBUG pytest --log-cli-level=DEBUG -xvs'
+alias quiet='pytest -q --tb=no'
+alias med='LOG_LEVEL=WARN pytest -xvs'
+

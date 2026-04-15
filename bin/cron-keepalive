@@ -1,0 +1,14 @@
+#!/bin/bash
+
+SC_PRINT_HEADER=1
+while touch ~/.k8s_cron_keep_alive
+do 
+	if [ "$SC_PRINT_HEADER" -eq 1 ]; then
+		kubectl top pod $1 | head -2
+		SC_PRINT_HEADER=0
+	else
+		kubectl top pod $1 | grep -vE "^NAME"
+	fi
+	kubectl exec -it $1 -- touch /root/.bash_history
+	sleep 6
+done

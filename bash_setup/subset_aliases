@@ -1,0 +1,30 @@
+alias k8l='kubectl config get-contexts'
+alias k8s='kubectl config use-context'
+alias k8n='kubectl config set-context --current --namespace'
+
+alias kssh='fxk(){  kubectl exec -it $@ -- /bin/bash;  unset -f fxk; }; fxk'
+alias ksh='fxk(){  kubectl exec -it $@ -- /bin/sh;  unset -f fxk; }; fxk'
+alias kbash='fxk(){  kubectl exec -it $@ -- /bin/bash;  unset -f fxk; }; fxk'
+alias kmux='fxk(){  kubectl exec -it $@ -- /usr/bin/tmux -u new-session -A -s $(whoami);  unset -f fxk; }; fxk'
+alias kmux2='fxk(){  kubectl exec -it $@ -- /usr/bin/tmux -u new-session -A -s $(whoami)2;  unset -f fxk; }; fxk'
+
+alias pytest-noisy='PYTHONUNBUFFERED=1 LOG_LEVEL=DEBUG pytest --log-cli-level=DEBUG -xvs'
+alias pytest-quiet='pytest -q --tb=no'
+alias pytest-med='LOG_LEVEL=WARN pytest -xvs'
+
+alias s1='sudo $(fc -ln -1)'
+alias randkey='cat /dev/urandom | tr -dc _A-Z-a-z-0-9 | head -c${1:-64};echo;'
+
+alias sock='ssh socks -xfNT'
+alias cmm='ssh cmm -Xfnt tail -f /dev/null'
+alias cmmm='sudo mkdir -p /run/sshd ; sudo /usr/sbin/sshd ; ssh cmm -Xfnt tail -f /dev/null ;'
+alias awksum="awk '{sum+=\$0} END{print sum}'"
+
+alias pacr-login='fxk(){ ACR=$1 ; acrtoken=$(az acr login -n $ACR --expose-token --output tsv --query accessToken); podman login $ACR.azurecr.io -u "00000000-0000-0000-0000-000000000000" -p $acrtoken ;  unset -f fxk; }; fxk'
+alias dacr-login='az acr login -n'
+
+export DOCKER=docker
+
+if [ -d ~/code/bin ]; then
+    export PATH=~/code/bin:$PATH
+fi

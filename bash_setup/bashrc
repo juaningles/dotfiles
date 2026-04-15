@@ -1,0 +1,224 @@
+# ~/.bashrc: executed by bash(1) for non-login shells.
+# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
+# for examples
+# If not running interactively, don't do anything
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
+# don't put duplicate lines or lines starting with space in the history.
+# See bash(1) for more options
+HISTCONTROL=ignoreboth
+
+# append to the history file, don't overwrite it
+shopt -s histappend
+
+# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
+HISTSIZE=1000
+HISTFILESIZE=2000
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS.
+shopt -s checkwinsize
+
+# If set, the pattern "**" used in a pathname expansion context will
+# match all files and zero or more directories and subdirectories.
+#shopt -s globstar
+
+# make less more friendly for non-text input files, see lesspipe(1)
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+
+# set variable identifying the chroot you work in (used in the prompt below)
+if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
+    debian_chroot=$(cat /etc/debian_chroot)
+fi
+
+# set a fancy prompt (non-color, unless we know we "want" color)
+case "$TERM" in
+    xterm-color|*-256color) color_prompt=yes;;
+esac
+
+# uncomment for a colored prompt, if the terminal has the capability; turned
+# off by default to not distract the user: the focus in a terminal window
+# should be on the output of commands, not on the prompt
+force_color_prompt=yes
+
+if [ -n "$force_color_prompt" ]; then
+    if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
+        # We have color support; assume it's compliant with Ecma-48
+        # (ISO/IEC-6429). (Lack of such support is extremely rare, and such
+        # a case would tend to support setf rather than setaf.)
+        color_prompt=yes
+    else
+        color_prompt=
+    fi
+fi
+
+
+
+git_branch () { git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/'; }
+
+# see if we are running in a container
+pid=$(ps ax | grep "[r]edis-server \*:6379" | awk '{print $1}')
+pid_read=$(readlink "/proc/$pid/ns/pid")
+if [ "$pid_read" == "$(readlink /proc/1/ns/pid)" ]; then
+   # pid $pid is the same namespace as init system
+   unset IN_MATRIX
+else
+  # pid $pid is NOT the same namespace as init system
+  export IN_MATRIX=yes
+fi
+
+if [ "$color_prompt" = yes ]; then
+    if [ -z "$IN_MATRIX" ]; then
+      PS_HOST='\033[01;32m\]\h\033[01;32m\]'
+    else
+      PS_HOST='\033[01;32m\]devnode\033[01;32m\]'
+    fi
+    PS_TIME='\033[01;36m\]\t\033[01;32m\]'
+    PS_LOCATION=' \033[01;34m\]`pwd | sed "s#\(/[^/]\{1,\}/[^/]\{1,\}/[^/]\{1,\}/\).*\(/[^/]\{1,\}/[^/]\{1,\}\)/\{0,1\}#\1_\2#g"`'
+    PS_LOCATION='\[\033[01;34m\]\w\[\033[00m\]'
+
+    if [ -f "/etc/bash_completion.d/git-prompt" ]; then
+      source /etc/bash_completion.d/git-prompt
+      export GIT_PS1_SHOWDIRTYSTATE=1
+    #  export PS1='\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$(__git_ps1 "(%s)")\$ '
+      PS_BRANCH=' \033[00;33m\]$(git_branch)\[\033[00m\]\n\$ '
+      export GIT_PS1_SHOWUNTRACKEDFILES=yes
+      export GIT_PS1_SHOWCONFLICTSTATE=yes
+      export GIT_PS1_SHOWDIRTYSTATE=yes
+      export GIT_PS1_SHOWSTASHSTATE=yes
+      export GIT_PS1_SHOWUPSTREAM=yes
+      export GIT_PS1_SHOWCOLORHINTS=yes
+      PS_BRANCH=' \033[00;33m\]$(__git_ps1 "(%s)")\[\033[00m\]'
+    fi
+    PS_USER="\u"
+
+    PS1="$PS_TIME $PS_USER@$PS_HOST:$PS_LOCATION $PS_BRANCH\n \$ "
+    PS2='\[\033[01;36m\]>'
+
+    #last PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\n \$ '
+    #older PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]$(__git_ps1)\n \$ '
+else
+    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+fi
+unset color_prompt force_color_prompt
+
+# If this is an xterm set the title to user@host:dir
+case "$TERM" in
+xterm*|rxvt*)
+    PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
+    ;;
+*)
+    ;;
+esac
+
+# enable color support of ls and also add handy aliases
+if [ -x /usr/bin/dircolors ]; then
+    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    #alias dir='dir --color=auto'
+    #alias vdir='vdir --color=auto'
+
+    alias grep='grep --color=auto'
+    alias fgrep='fgrep --color=auto'
+    alias egrep='egrep --color=auto'
+fi
+
+# colored GCC warnings and errors
+#export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+
+# some more ls aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+
+# Add an "alert" alias for long running commands.  Use like so:
+#   sleep 10; alert
+alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
+
+# Alias definitions.
+# You may want to put all your additions into a separate file like
+# ~/.bash_aliases, instead of adding them here directly.
+# See /usr/share/doc/bash-doc/examples in the bash-doc package.
+
+if [ -f ~/.bash_aliases ]; then
+    . ~/.bash_aliases
+fi
+
+# enable programmable completion features (you don't need to enable
+# this, if it's already enabled in /etc/bash.bashrc and /etc/profile
+# sources /etc/bash.bashrc).
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+
+alias kwatch='watch kubectl'
+alias kpw='fxk(){  kubectl get pod $@ --watch  ;  unset -f fxk; }; fxk'
+alias kssh='fxk(){  kubectl exec -it $@ -- /bin/bash;  unset -f fxk; }; fxk'
+alias ksh='fxk(){  kubectl exec -it $@ -- /bin/sh;  unset -f fxk; }; fxk'
+alias kbash='fxk(){  kubectl exec -it $@ -- /bin/bash;  unset -f fxk; }; fxk'
+alias kmux='fxk(){  kubectl exec -it $@ -- /usr/bin/tmux -u new-session -A -s $USER;  unset -f fxk; }; fxk'
+
+alias k=kubectl
+alias kd='kubectl describe $@'
+alias kg='kubectl get $@'
+
+alias k8l='kubectl config get-contexts'
+alias k8s='kubectl config use-context'
+alias k8n='kubectl config set-context --current --namespace'
+alias knodes='kubectl get nodes -o wide'
+alias kpods='kubectl get pods -o wide'
+alias klogs='kubectl logs --follow'
+alias kl='kubectl get pods,jobs,cronjobs -o wide'
+
+alias kadaar='kubectl exec -it $KA_ENV -- adaar -V'
+alias krunq='kubectl exec -it $KA_ENV -- runq -V'
+
+alias randkey='cat /dev/urandom | tr -dc _A-Z-a-z-0-9 | head -c${1:-64};echo;'
+alias sock='ssh socks -xfNT'
+
+export ADAAR_IMAGE_REPO=reponame.azurecr.io/
+export ADAAR_IMAGE=${ADAAR_IMAGE_REPO}adaar-debug:jessie
+
+alias dadaar='docker run  -v /mnt/c/code/perlibs:/usr/depot/perlibs -v /mnt/c/code/adaar-apps:/usr/depot/adaar-apps -v $(pwd):/usr/depot/local -it --rm $ADAAR_IMAGE adaar -V --chdir /usr/depot/local'
+alias dadaard='docker run  -v /mnt/c/code/perlibs:/usr/depot/perlibs -v /mnt/c/code/adaar-apps:/usr/depot/adaar-apps -v $(pwd):/usr/depot/local -it --rm $ADAAR_IMAGE adaard -V --chdir /usr/depot/local'
+
+alias ksqlproxy='echo Running as localhost:31433 ; kubectl port-forward service/mssql 31433:1433 --namespace=mssql'
+alias ksql='kubectl exec svc/mssql -it -n mssql -- /bin/bash -c "/opt/mssql-tools/bin/sqlcmd -U sa -P \$SA_PASSWORD"'
+
+export KA_ENVcli=svc/cli
+export KA_ENV='svc/cli'
+
+source <(kubectl completion bash)
+complete -F __start_kubectl k
+
+export PATH="/usr/depot/bin:$PATH"
+eval `keychain --eval --agents ssh $(cat ~/.keychain_default_keys 2> /dev/null || echo "~/.ssh/id_rsa")`
+
+#export HOSTIP=$( ip route | grep "default via" | tr -s " " | cut -d " " -f 3 )
+export PERL5LIB="/usr/depot/Komodo-PerlRemoteDebugging-12.0.1-91869-linux-x86_64:$PERL5LIB"
+export PERLDB_OPTS="RemotePort=$HOSTIP:9000   async=1"
+
+alias squelch='grep -P "(^(\e\[[^\[]*)|^(\[))\[[PI].*"'
+
+export LS_COLORS="$LS_COLORS:ow=01;36;40"
+alias activate="source venv.sh"
+export uADAAR_CHDIR=/mnt/c/code/feeds/dev
+# cd ~/code
+
+alias acr-login='fxk(){ ACR=$1 ; acrtoken=$(az acr login -n $ACR --expose-token --output tsv --query accessToken); podman login $ACR.azurecr.io -u "00000000-0000-0000-0000-000000000000" -p $acrtoken ;  unset -f fxk; }; fxk'
+export PATH=~/code/bin:$PATH
+
+#alias di=docker images --format "table {{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}"
+#alias dive="docker run -ti --rm  -v /var/run/docker.sock:/var/run/docker.sock wagoodman/dive"
+
+alias code='cd ~/code'
+
+
+. "$HOME/.local/bin/env"

@@ -1,0 +1,184 @@
+#!/bin/bash
+
+# Default values
+unset NAMESPACE
+CLUSTER=""
+APPLY=false
+INIT_CONTAINER=false
+CUSTOM_NAME=""
+CUSTOM_IMAGE=""
+CUSTOM_COMMAND=""
+APPLY=true
+
+# Help function
+print_usage() {
+    cat << EOF
+Usage: $(basename $0) [OPTIONS] CRONJOB_NAME
+
+Create a Kubernetes job from a cronjob with customizable options.
+
+Options:
+    -h, --help              Show this help message
+    -i, --init             Create job from init container instead of main container
+    -t, --name NAME        Override the generated job name
+    -m, --image IMAGE      Override the container image
+    -n, --namespace NS     Kubernetes namespace
+    -r, --command CMD      Override the container command
+    -c, --cluster CLUSTER  Kubernetes cluster name
+    -d, --dry-run          Dont apply, output yaml instead
+
+Example:
+    $(basename $0) my-cronjob -n prod -c prod-cluster -a
+    $(basename $0) my-cronjob -i -n custom-job -m nginx:latest
+    $(basename $0) my-cronjob --command "sleep 3600"
+EOF
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        -i|--init)
+            INIT_CONTAINER=true
+            shift
+            ;;
+        -n|--name)
+            CUSTOM_NAME="$2"
+            shift 2
+            ;;
+        -m|--image)
+            CUSTOM_IMAGE="$2"
+            shift 2
+            ;;
+        -s|--namespace)
+            NAMESPACE="$2"
+            shift 2
+            ;;
+        -c|--cluster)
+            CLUSTER="$2"
+            shift 2
+            ;;
+        -r|--command)
+            CUSTOM_COMMAND="$2"
+            shift 2
+            ;;
+        -d|--dry-run)
+            APPLY=false
+            shift
+            ;;
+        *)
+            if [[ -z "$CRONJOB_NAME" ]]; then
+                CRONJOB_NAME="$1"
+            else
+                echo "Error: Unexpected argument: $1"
+                print_usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+
+# Validate required arguments
+if [ -z "$CRONJOB_NAME" ]; then
+    echo "Error: No cronjob name provided."
+    print_usage
+    exit 1
+fi
+
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq is required but not installed. Please install jq first."
+    echo "You can install it via: 'brew install jq' (macOS) or 'apt-get install jq' (Linux)"
+    exit 1
+fi
+
+# Normalize cronjob name
+cronjob_name=$(echo $CRONJOB_NAME | awk -F'/' '{print $NF}')
+
+# Generate job name if not provided
+if [ -z "$CUSTOM_NAME" ]; then
+    mydate=$(date +%s)
+    if "$INIT_CONTAINER"; then
+        job_name="cli-initj-$(echo ${cronjob_name} | sed -E 's/^(cronjob|cj[^-]*)(-)//')-${mydate}"
+    else
+        job_name="cli-mainj-$(echo ${cronjob_name} | sed -E 's/^(cronjob|cj[^-]*)(-)//')-${mydate}"
+    fi
+else
+    job_name="$CUSTOM_NAME"
+fi
+
+
+if [ -n "$NAMESPACE" ]; then
+    NAMESPACE_ARG="--namespace $NAMESPACE"
+fi
+
+# Build cluster argument if provided
+CLUSTER_ARG=""
+if [ -n "$CLUSTER" ]; then
+    CLUSTER_ARG="--cluster $CLUSTER"
+fi
+
+# Process command and args if provided
+COMMAND_FILTER=""
+if [ -n "$CUSTOM_COMMAND" ]; then
+    # Split command into array while preserving quotes
+    eval "cmd_array=($CUSTOM_COMMAND)"
+    
+    # First element is the command, rest are args
+    main_cmd="${cmd_array[0]}"
+    cmd_args=("${cmd_array[@]:1}")
+    
+    if [ ${#cmd_args[@]} -gt 0 ]; then
+        # Create jq filter for command and args
+        args_json=$(printf '%s\n' "${cmd_args[@]}" | jq -R . | jq -s .)
+        COMMAND_FILTER="| .spec.template.spec.containers[0].command = [\"$main_cmd\"] | .spec.template.spec.containers[0].args = $args_json"
+    else
+        # Command only, no args
+        COMMAND_FILTER="| .spec.template.spec.containers[0].command = [\"$main_cmd\"] | del(.spec.template.spec.containers[0].args)"
+    fi
+else
+    # Default command with no args
+    # COMMAND_FILTER="| .spec.template.spec.containers[0].command = [\"tail\", \"-f\", \"/dev/null\"] | del(.spec.template.spec.containers[0].args)"
+    COMMAND_FILTER="| .spec.template.spec.containers[0].command = [\"bash\", \"-c\", \"bash -c 'touch ~/.bash_history;while true;do tdiff=\$((\$(date +%s) - \$(stat -c %Y ~/.bash_history)));echo \$tdiff>>/tmp/watchtimer.log ;if [ \$tdiff -gt 1800 ];then break;fi;sleep 25;done'\"] | del(.spec.template.spec.containers[0].args)"
+fi
+
+# Build the jq filter for containers
+if $INIT_CONTAINER; then
+    CONTAINER_FILTER='
+      if .spec.template.spec.initContainers then
+        .spec.template.spec.containers = .spec.template.spec.initContainers |
+        del(.spec.template.spec.initContainers)
+      else . end |
+      del(.spec.template.spec.containers[0].args)'
+else
+    CONTAINER_FILTER='
+      del(.spec.template.spec.containers[0].args) |
+      del(.spec.template.spec.initContainers)'
+fi
+
+# Add image override to filter if provided
+IMAGE_FILTER=""
+if [ -n "$CUSTOM_IMAGE" ]; then
+    IMAGE_FILTER="| .spec.template.spec.containers[0].image = \"$CUSTOM_IMAGE\""
+fi
+
+# Combine all filters
+JQ_FILTER="${CONTAINER_FILTER} ${IMAGE_FILTER} ${COMMAND_FILTER}"
+
+
+
+# Build and execute the final command
+if $APPLY; then
+    kubectl create job ${job_name} --from=cronjob/${cronjob_name} -o json --dry-run=client $NAMESPACE_ARG $CLUSTER_ARG | \
+    jq "$JQ_FILTER" | \
+    kubectl apply -f - $NAMESPACE_ARG $CLUSTER_ARG
+else
+    kubectl create job ${job_name} --from=cronjob/${cronjob_name} -o json --dry-run=client $NAMESPACE_ARG $CLUSTER_ARG | \
+    jq "$JQ_FILTER" | \
+    kubectl apply -f - --dry-run=client -o yaml $NAMESPACE_ARG $CLUSTER_ARG
+fi
